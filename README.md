@@ -24,8 +24,8 @@ Data is extracted using the Zenodo REST API.
 - **Provider and Owner**: Identifies creating individuals and institutions.
 - **Temporal Coverage**: Uses regular expressions to scan for years (e.g., 1990-2023).
 - **Data Type**: Automatic classification based on keywords (human observation, imaging, tracking, or eDNA).
-- **File Type**: Unique file extensions are collected from attached files.
 - **Licensing and Access**: Retrieves license info and access conditions.
+- **File Type**: Unique file extensions are collected from attached files.
 
 ### Deduplication and Consolidation
 Records are uniquely identified by a key (Title + Provider). If a record is found multiple times, the Taxa covered and Geographic coverage fields are concatenated.
