@@ -1,0 +1,148 @@
+ZENODO DATA EXTRACTION METHODOLOGY
+(revised 3 September 2026 - marine relevance filtering)
+
+1. OBJECTIVE
+To build an automated inventory of MARINE BIOLOGY datasets available on Zenodo that could be
+mobilised into EMODnet (EMODnet Biology WP4, Task 7.2). Per the D4.3.3 running notes, the
+inventory must contain biology datasets only, i.e. datasets holding species occurrence /
+distribution data or habitat / biotope data.
+
+2. WHY THE METHOD WAS REVISED
+The previous run produced a raw list of 698 keyword hits rather than a marine inventory. It
+contained datasets on trees, forests, Amazonian plants, agriculture, tundra, rodents, lakes and
+rivers, as well as laboratory experiments, genetic data and model output. Root causes:
+- ambiguous search terms: "Angiosperms" returned terrestrial plants, "Atlantic" matched
+  "Atlantic Forest", and "Arctic" sometimes occurred in a species name or in an author's
+  affiliation;
+- no mandatory marine context in the query;
+- no negative keywords;
+- a spelling error: "Mediteranean Sea" (single "r") returned 0 hits, so the entire Mediterranean
+  region was missing from the inventory.
+
+3. SEARCH PARAMETERS - MARINE VOCABULARY
+Each canonical category is searched through a list of marine-specific synonyms rather than a
+single generic word.
+
+Taxa (canonical label -> queried synonyms):
+- Angiosperms   -> marine angiosperms, seagrass(es), seagrass meadow, eelgrass, Zostera,
+                   Posidonia, Cymodocea, Halophila, Ruppia, Thalassia, saltmarsh
+- Birds         -> seabird(s), marine birds, waterbirds, shorebirds, coastal birds, Alcidae,
+                   Laridae, Procellariiformes
+- Benthos       -> benthos, benthic, macrobenthos, meiobenthos, zoobenthos, macrofauna, infauna,
+                   epifauna, benthic habitat, biotope
+- Macroalgae    -> macroalgae, seaweed(s), kelp, Fucus, Laminaria, Cystoseira, Ulva, Rhodophyta,
+                   Phaeophyceae
+- Mammals       -> marine mammals, cetacean(s), whale, dolphin, porpoise, pinniped, seal,
+                   Phocidae, Cetacea
+- Phytoplankton -> phytoplankton, microphytoplankton, diatom(s), dinoflagellate(s),
+                   coccolithophore, microalgae, harmful algal bloom, chlorophyll a
+- Reptiles      -> sea turtle(s), marine turtle(s), marine reptiles, Caretta, Chelonia mydas,
+                   Dermochelys
+- Zooplankton   -> zooplankton, mesozooplankton, copepod(s), ichthyoplankton, jellyfish,
+                   gelatinous zooplankton, Calanus, Noctiluca, Mnemiopsis
+- Virus         -> marine virus(es), virioplankton, bacteriophage, marine virome, viral abundance
+
+Geographic regions (canonical label -> queried synonyms):
+- Arctic            -> Arctic Ocean, Arctic marine waters, Arctic seas, Barents Sea, Greenland Sea,
+                       Norwegian Sea, Fram Strait, Svalbard, Chukchi Sea, Kara Sea, Beaufort Sea,
+                       White Sea
+- Atlantic          -> Atlantic Ocean, North Atlantic, Northeast Atlantic, NE Atlantic,
+                       Bay of Biscay, Celtic Sea, Irish Sea, Iberian coast, Macaronesia, Azores
+- Baltic Sea        -> Baltic Sea, Gulf of Bothnia, Gulf of Finland, Gulf of Riga, Kattegat,
+                       Skagerrak, Bothnian Bay
+- Black Sea         -> Black Sea, Sea of Azov, Sea of Marmara, Bosphorus
+- Mediterranean Sea -> Mediterranean Sea (spelling corrected), Adriatic Sea, Aegean Sea,
+                       Ionian Sea, Tyrrhenian Sea, Ligurian Sea, Alboran Sea, Gulf of Lions,
+                       Levantine Sea, Balearic Sea
+- North Sea         -> North Sea, Wadden Sea, German Bight, English Channel, Southern Bight,
+                       Dogger Bank
+
+4. TECHNICAL PROCESS
+Data is extracted using the Zenodo REST API (https://zenodo.org/api/records).
+
+A. API Querying:
+- An access token is used to ensure connection stability.
+- For each (Taxon, Region) pair a MANDATORY THREE-WAY COMBINATION is built:
+      (taxon synonyms) AND (region synonyms) AND (marine terms)
+  The marine group is: marine, sea, ocean, coastal, benthic, pelagic, estuarine, plankton.
+  A dataset therefore cannot enter the results merely because a region name happens to appear
+  in its text - a marine context must be present as well.
+- Results are filtered to include only "dataset" type items.
+- Zenodo (Elasticsearch) rejects queries exceeding roughly 1000 boolean clauses with HTTP 500,
+  and the clause count is the product of the three OR-group sizes. Synonym lists are therefore
+  chunked automatically (640-clause budget) and the partial result sets are merged by Zenodo
+  record ID.
+- Retry logic handles network errors and server rate limiting.
+
+B. Metadata Extraction and Processing:
+- Title and identifiers: dataset title, DOI and link to the HTML landing page.
+- Provider and owner: "Provider" is the first listed creator; "Data owner" is the full list of
+  creators with their affiliations.
+- Temporal coverage: regular expressions scan title, description and keywords for years and year
+  ranges; if no explicit range is found, the publication date is used.
+- Data type: automatic classification into "human observation", "imaging", "tracking" and "eDNA"
+  based on description keywords.
+- File type: unique extensions of the attached files are collected (.csv, .xlsx, .pdf, .zip).
+- Licensing and access: the license and the access conditions (Open, Embargoed, Restricted,
+  Closed) are retrieved.
+
+5. RELEVANCE FILTERING (new stage)
+Screening reads ONLY the title, description and keywords - never the author affiliations. This
+removes false positives such as "Arctic University of Norway", where "Arctic" belonged to the
+institution and not to the study area. Matching is word-boundary aware.
+
+Each record receives one of three statuses:
+
+a) Excluded - dropped automatically when:
+   - it contains a clear negative keyword: "Atlantic Forest", Amazonian, rainforest,
+     tree growth, vascular plants, soil DNA, laboratory experiment, transcriptome,
+     model output, simulation, palaeoclimate;
+   - the requested taxon does not actually appear in title / description / keywords;
+   - the requested region does not actually appear in title / description / keywords;
+   - no marine context term is present.
+
+b) Manual review - kept but flagged for human checking when:
+   - it contains a caution term, which is deliberately NOT auto-excluded because the dataset may
+     still hold relevant marine data: freshwater, lake, river, tundra, forest, supplementary
+     material, source code, software, agriculture, soil, greenhouse, terrestrial, phylogenetic,
+     genome. "terrestrial", "phylogenetic" and "genome" were moved here from the hard-exclusion
+     list on 3 September 2026: they occur frequently in legitimate marine datasets (e.g. "marine
+     and terrestrial" transects, phylogenetic studies of marine species, eDNA / metabarcoding
+     datasets using reference genomes), so such records are reviewed by hand instead of being
+     dropped;
+   - it is marine but shows no clear evidence of species occurrence or habitat data.
+
+   Calibration note: a taxon or region appearing only in the description, and not in the title
+   or keywords, does NOT send a record to manual review. Zenodo titles are frequently terse
+   ("Data from: ...") and many records carry no keywords at all, so this is normal rather than
+   suspicious; it is merely recorded in "Review notes" as "doar in descriere" (description only).
+
+c) Included - satisfies every condition: taxon present, region present, marine context present,
+   biological content evidence (occurrence, abundance, biomass, distribution, habitat, biotope,
+   survey, monitoring, species richness, etc.) and no caution term.
+
+The reason for each decision, together with the terms that triggered it, is written to the
+"Review notes" column. Excluded records are NOT lost: they are kept in full, with the exclusion
+reason, in a separate sheet, so the filtering can be audited and challenged.
+
+6. DEDUPLICATION AND CONSOLIDATION
+Since a dataset may appear in several searches (e.g. one containing both Zooplankton and
+Phytoplankton), a consolidation logic is applied:
+- Records are uniquely identified by a key of (Title + Provider).
+- If a record is found several times, "Taxa covered" and "Geographic coverage" are concatenated
+  to reflect all criteria met.
+- File formats are merged into a single unique list.
+- The most favourable status wins: if a record qualifies on at least one taxon/region
+  combination it stays in the inventory and does not appear in the "Excluded" sheet.
+
+7. DATA FINALIZATION
+Final results are saved as:
+- Excel (Dataset_Inventory_Zenodo_Marine.xlsx) with four sheets:
+    * Inventory     - validated records (Included);
+    * Manual review - uncertain cases for expert checking;
+    * Excluded      - rejected records with the reason, as an audit trail;
+    * Search log    - the queries actually sent to Zenodo and the hit counts per taxon/region
+                      combination (D4.3.3 requirement to record the search process).
+- JSON (C:/xampp/htdocs/zenodo_inventory/data.json): feeds the interactive web dashboard
+  (https://sdn2.rmri.ro/zenodo_inventory/) and contains the Included and Manual review records,
+  distinguished by the "Status" field.

@@ -14,3 +14,7 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Outputs
+Dataset_Inventory_Zenodo_Marine.xlsx
+.env
